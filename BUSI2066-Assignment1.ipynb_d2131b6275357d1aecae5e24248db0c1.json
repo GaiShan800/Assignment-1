@@ -49,13 +49,20 @@
    "metadata": {},
    "outputs": [],
    "source": [
+    "import os\n",
+    "import glob\n",
     "import pandas as pd\n",
     "import numpy as np\n",
     "import seaborn as sns\n",
     "import matplotlib.pyplot as plt\n",
     "from scipy.stats import bootstrap, pearsonr\n",
     "\n",
-    "v = pd.read_csv('visitors.csv')"
+    "csv_candidates = ['visitors.csv'] + sorted(glob.glob('visitors*.csv'))\n",
+    "csv_path = next((c for c in csv_candidates if os.path.exists(c)), None)\n",
+    "if csv_path is None:\n",
+    "    raise FileNotFoundError('No visitors CSV file was found in this folder.')\n",
+    "\n",
+    "v = pd.read_csv(csv_path)"
    ]
   },
   {
@@ -96,7 +103,30 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "# Your diagnostic and corrected code here"
+    "# Question 1: fix the satisfaction percentage\n",
+    "# The file contains the spelling error 'Netural' instead of 'Neutral'\n",
+    "order = [\n",
+    "    'Very Unsatisfactory',\n",
+    "    'Unsatisfactory',\n",
+    "    'Neutral',\n",
+    "    'Satisfactory',\n",
+    "    'Very Satisfactory'\n",
+    "]\n",
+    "\n",
+    "v['satisfaction_clean'] = v['satisfaction'].astype(str).str.strip().replace({'Netural': 'Neutral'})\n",
+    "counts = v['satisfaction_clean'].value_counts().reindex(order, fill_value=0)\n",
+    "satisfied_count = counts['Satisfactory'] + counts['Very Satisfactory']\n",
+    "satisfied_percent = (satisfied_count / len(v)) * 100\n",
+    "\n",
+    "print('Counts by satisfaction level:')\n",
+    "print(counts)\n",
+    "print(f'Total visitors: {len(v)}')\n",
+    "print(f'Satisfied visitors: {satisfied_count}')\n",
+    "print(f'Correct satisfied percentage: {satisfied_percent:.4f}%')\n",
+    "if satisfied_percent >= 60:\n",
+    "    print('The store has met the target of at least 60% satisfied visitors.')\n",
+    "else:\n",
+    "    print('The store has NOT met the target of at least 60% satisfied visitors.')"
    ]
   },
   {
@@ -104,7 +134,7 @@
    "id": "39033ed1",
    "metadata": {},
    "source": [
-    "Your explanation:"
+    "The original code left out all answers written as 'Netural'. In the data, those rows are misspelled and are therefore treated as missing values when converted to a categorical variable. The fix is to correct the spelling in memory and then count every visitor in the total. The satisfied group is 'Satisfactory' plus 'Very Satisfactory'. The corrected percentage is about 56.0000%, so the store has not met the target of at least 60%."
    ]
   },
   {
@@ -128,7 +158,27 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "# Your code here"
+    "# Question 2: bootstrap confidence intervals for mean spending\n",
+    "spending = v['expenditure'].dropna().to_numpy()\n",
+    "\n",
+    "ci_95 = bootstrap(\n",
+    "    (spending,),\n",
+    "    np.mean,\n",
+    "    confidence_level=0.95,\n",
+    "    n_resamples=10_000,\n",
+    "    rng=2026\n",
+    ")\n",
+    "\n",
+    "ci_90 = bootstrap(\n",
+    "    (spending,),\n",
+    "    np.mean,\n",
+    "    confidence_level=0.90,\n",
+    "    n_resamples=10_000,\n",
+    "    rng=2026\n",
+    ")\n",
+    "\n",
+    "print(f'95% CI for mean spending: HKD {ci_95.confidence_interval.low:.2f} to HKD {ci_95.confidence_interval.high:.2f}')\n",
+    "print(f'90% CI for mean spending: HKD {ci_90.confidence_interval.low:.2f} to HKD {ci_90.confidence_interval.high:.2f}')"
    ]
   },
   {
@@ -136,7 +186,7 @@
    "id": "4dfcd2fa",
    "metadata": {},
    "source": [
-    "Your explanation:"
+    "A confidence interval is about the population mean, not about the distribution of all visitors' spending. The 95% interval does not contain 95% of individual spending values. It means that, under repeated random sampling, approximately 95% of intervals created this way would include the true mean. The 90% interval is narrower because it is less confident; it is not more accurate simply because it is narrower. A narrower interval can be less reliable if it misses the true mean more often."
    ]
   },
   {
@@ -162,7 +212,21 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "# Your code here"
+    "# Question 3: membership share and projected mean spending\n",
+    "member_mean = v.loc[v['membership'] == 1, 'expenditure'].mean()\n",
+    "nonmember_mean = v.loc[v['membership'] == 0, 'expenditure'].mean()\n",
+    "\n",
+    "current_member_percent = v['membership'].mean() * 100\n",
+    "current_overall_mean = v['expenditure'].mean()\n",
+    "next_month_estimate = 0.70 * member_mean + 0.30 * nonmember_mean\n",
+    "difference = next_month_estimate - current_overall_mean\n",
+    "\n",
+    "print(f'Current visitors who are members: {current_member_percent:.4f}%')\n",
+    "print(f'Mean spending for members: HKD {member_mean:.2f}')\n",
+    "print(f'Mean spending for nonmembers: HKD {nonmember_mean:.2f}')\n",
+    "print(f'Current overall mean: HKD {current_overall_mean:.2f}')\n",
+    "print(f'Estimated next month\'s mean spending: HKD {next_month_estimate:.2f}')\n",
+    "print(f'Difference (estimate minus current mean): HKD {difference:.2f}')"
    ]
   },
   {
@@ -170,7 +234,7 @@
    "id": "e86f1b0d",
    "metadata": {},
    "source": [
-    "Your explanation:"
+    "The current file contains a certain percentage of members, and the estimate for next month uses a new membership mix of 70% and 30%. More bootstrap runs would not change the file's membership share; they only reduce simulation noise. The estimate could be wrong if the spending patterns of members or non-members change next month or if the current sample is not representative of the next month's visitor population."
    ]
   },
   {
@@ -193,7 +257,17 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "# Your code here"
+    "# Question 4: scatter plot and Pearson correlation\n",
+    "sns.scatterplot(data=v, x='time', y='expenditure')\n",
+    "plt.title('Website visit time and monthly expenditure')\n",
+    "plt.xlabel('Time on website during last visit (minutes)')\n",
+    "plt.ylabel('Expenditure last month (HKD)')\n",
+    "plt.tight_layout()\n",
+    "plt.show()\n",
+    "\n",
+    "r_value, p_value = pearsonr(v['time'], v['expenditure'])\n",
+    "print(f'Pearson r: {r_value:.4f}')\n",
+    "print(f'Two-sided p value: {p_value:.4f}')"
    ]
   },
   {
@@ -201,7 +275,7 @@
    "id": "8354cf4d",
    "metadata": {},
    "source": [
-    "Your explanation:"
+    "The scatter plot shows whether the points rise together or not. Pearson's r measures the strength and direction of the linear relationship, while the p-value tests whether that correlation is statistically distinguishable from zero. At the 5% level, we conclude there is evidence of a linear relationship if the p-value is less than 0.05. The interpretation should be careful because a correlation does not prove that the longer visit caused the higher spending; it only shows an association between the two variables."
    ]
   },
   {
@@ -224,7 +298,19 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "# Your code here"
+    "# Question 5: does changing units change the relationship?\n",
+    "v['time_seconds'] = v['time'] * 60\n",
+    "\n",
+    "cov_minutes = v[['time', 'expenditure']].cov().loc['time', 'expenditure']\n",
+    "cov_seconds = v[['time_seconds', 'expenditure']].cov().loc['time_seconds', 'expenditure']\n",
+    "\n",
+    "r_minutes, _ = pearsonr(v['time'], v['expenditure'])\n",
+    "r_seconds, _ = pearsonr(v['time_seconds'], v['expenditure'])\n",
+    "\n",
+    "print(f'Covariance with time in minutes: {cov_minutes:.4f}')\n",
+    "print(f'Covariance with time in seconds: {cov_seconds:.4f}')\n",
+    "print(f'Pearson r with time in minutes: {r_minutes:.4f}')\n",
+    "print(f'Pearson r with time in seconds: {r_seconds:.4f}')"
    ]
   },
   {
@@ -232,7 +318,7 @@
    "id": "c413f5b3",
    "metadata": {},
    "source": [
-    "Your explanation:"
+    "Changing minutes to seconds multiplies each time value by 60, so the covariance also changes by a factor of 60 because covariance is measured in the units of the variables. However, Pearson's r is unit-free and therefore unchanged by a positive rescaling. Hence the report's claim is false: the relationship is not stronger just because the units changed. The numerical value of covariance changed because the unit changed, not because the association got stronger."
    ]
   },
   {
@@ -256,7 +342,22 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "# Your code here"
+    "# Question 6: check whether a log transformation helps\n",
+    "print(f'Smallest time value: {v[\'time\'].min():.4f} minutes')\n",
+    "# The minimum time is positive, so taking log(time) is valid without adding 1\n",
+    "\n",
+    "v['log_time'] = np.log(v['time'])\n",
+    "\n",
+    "sns.scatterplot(data=v, x='log_time', y='expenditure')\n",
+    "plt.title('Log of website visit time and monthly expenditure')\n",
+    "plt.xlabel('Log of time on website during last visit')\n",
+    "plt.ylabel('Expenditure last month (HKD)')\n",
+    "plt.tight_layout()\n",
+    "plt.show()\n",
+    "\n",
+    "r_log, p_log = pearsonr(v['log_time'], v['expenditure'])\n",
+    "print(f'Pearson r for log(time): {r_log:.4f}')\n",
+    "print(f'Two-sided p value for log(time): {p_log:.4f}')"
    ]
   },
   {
@@ -264,7 +365,7 @@
    "id": "5e5ec90f",
    "metadata": {},
    "source": [
-    "Your explanation:"
+    "The smallest time value is positive, so it is not necessary to add 1 before taking the logarithm. A log transformation does not automatically make the correlation stronger; it only changes the scale of the x-variable. We should not try transformations only to obtain a small p-value, because that can create a misleading appearance of significance. A transformation is justified only if it matches the underlying data pattern and the research question."
    ]
   }
  ],
